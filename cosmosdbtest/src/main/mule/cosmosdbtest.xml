@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="2584dd48-cb2c-4037-99c9-67f3eea0040e" >
+		<http:listener-connection host="0.0.0.0" port="8088" />
+	</http:listener-config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="eeb9aa3b-cd1c-413b-b152-7ba521788fb7" >
+		<http:request-connection protocol="HTTPS" host="bc47481e-0ee0-4-231-b9ee.documents.azure.com" port="443" />
+	</http:request-config>
+	<flow name="cosmosdbtestFlow" doc:id="ff5eb063-b98f-40c4-be03-8e1ca66e1728" >
+		<http:listener doc:name="Listener" doc:id="f539fd66-d565-4828-ad64-1620116dd842" config-ref="HTTP_Listener_config" path="/sqlapi"/>
+		<ee:transform doc:name="Serialize the payload to JSON format" doc:id="1db6b8b2-ae93-4803-9487-e41e4cbea0a8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Set ServerTime to a variable serverDateTime" doc:id="f769f403-796c-4f07-9548-c3ac644d23f8" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="serverDateTime" ><![CDATA[%dw 2.0
+import java!cosmosdbtest::AuthorizationHeaderImpl
+output application/java
+---
+AuthorizationHeaderImpl::getTime()]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		
+		<ee:transform doc:name="Set AuthKey" doc:id="9103bb8e-0ff1-49b6-9e2f-6c65b5fd188c" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="authKey" ><![CDATA[%dw 2.0
+import java!cosmosdbtest::GenerateHeader
+output application/java
+---
+GenerateHeader::generate(vars.serverDateTime)]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<http:request method="POST" doc:name="Send request to Cosmos DB API for SQL" doc:id="d1b8eda4-8576-48b2-ab08-c27bfa422779" config-ref="HTTP_Request_configuration" path="dbs/tempdb/colls/testcontainer/docs">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Accept" : "application/json",
+	"x-ms-version" : "2016-07-11",
+	"Authorization" : vars.authKey,
+	"x-ms-date" : vars.serverDateTime,
+	"Content-Type" : "application/json",
+	"x-ms-documentdb-partitionkey" : '["' ++ payload.zipcode ++ '"]'
+}]]]></http:headers>
+		</http:request>
+		<logger level="INFO" doc:name="Logger" doc:id="a7c8792a-d617-48f9-a112-65b7776e0447" message="Success"/>
+	</flow>
+</mule>
